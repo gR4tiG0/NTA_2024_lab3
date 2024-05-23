@@ -237,6 +237,9 @@ void trivialFactor(mpz_t result, const mpz_t n) {
 }
 
 int isMillerRabin(mpz_t num, gmp_randstate_t randState) {
+    if (mpz_cmp_ui(num, 1) == 0) {
+        return 1;
+    }
     mpz_t randomNum;
     int repeat;
     mpz_init(randomNum);
@@ -311,6 +314,8 @@ FactorPowerPair* factorize(mpz_t mpz_n, int* numFactors) {
                 mpz_clear(step_res);   
                 // gmp_printf("Factor: %Zd\n", factor);
             }
+            
+            // gmp_printf("factor: %Zd\n", factor);
 
             // Check if factor is already in the factors array
             int found = 0;
@@ -331,9 +336,23 @@ FactorPowerPair* factorize(mpz_t mpz_n, int* numFactors) {
 
             mpz_divexact(mpz_n, mpz_n, factor);
             if (isMillerRabin(mpz_n, rand_state)) {
-                mpz_init_set(factors[*numFactors].factor, mpz_n);
-                mpz_init_set_ui(factors[*numFactors].power, 1);
-                (*numFactors)++;
+                // printf("n is prime\n");
+                // gmp_printf("n: %Zd\n", mpz_n);
+                int found = 0;
+                for (int i = 0; i < *numFactors; i++) {
+                    if (mpz_cmp(factors[i].factor, mpz_n) == 0) {
+                        mpz_add_ui(factors[i].power, factors[i].power, 1);
+                        found = 1;
+                        break;
+                    }
+                }
+
+                // If factor is not in the factors array, add it
+                if (!found) {
+                    mpz_init_set(factors[*numFactors].factor, mpz_n);
+                    mpz_init_set_ui(factors[*numFactors].power, 1);
+                    (*numFactors)++;
+                }
                 break;
             }
 
@@ -432,14 +451,7 @@ void gaussian_elim(mpz_t **matrix, mpz_t *solution_array, mpz_t modulus, int hei
             }
             //log ---------------------------------------------
 
-            // printf("Matrix:\n");
-            // for (int it = 0; it < height; it++) {
-            //     for (int jt = 0; jt < width; jt++) {
-            //         printf("%d ", matrix[it][jt]);
-            //     }
-            //     printf("\n");
-            // }
-            // printf("\n");
+            
             break;
         }
     }
@@ -451,7 +463,79 @@ void gaussian_elim(mpz_t **matrix, mpz_t *solution_array, mpz_t modulus, int hei
             }
         }
     }
+    printf("Matrix:\n");
+    for (int it = 0; it < height; it++) {
+        for (int jt = 0; jt < width; jt++) {
+            gmp_printf("%Zd ", matrix[it][jt]);
+        }
+        printf("\n");
+    }
+    printf("\n");
     mpz_clears(temp, r, res, NULL);
+}
+
+
+void slv(mpz_t **matrix, mpz_t *solution_array, mpz_t modulus, int height, int width, mpz_t *result) {
+    uint64_t *used = malloc(width * sizeof(uint64_t));
+    for (int i = 0; i < width; i++) {
+        used[i] = -1; 
+    }
+    for (int i = 0; i < width; i++) {
+        uint64_t ind = 0;
+        for (int j = 0; j < height; j++) {
+            int notUsed = 1;
+            for (int k = 0; k < width; k++) {
+                if (used[k] == j) notUsed = 0;
+            }
+            if (mpz_cmp_ui(matrix[j][i], 1) == 0 && notUsed) {
+                ind = j;
+                // printf("index for i=%d is %d\n", i, ind);
+                used[i] = ind;
+                break;
+            }
+        }
+
+        for (int j = 0; j < height; j++) {
+            if (j == ind) continue;
+            mpz_t mult, tmp;
+            mpz_init_set(mult, matrix[j][i]);
+            mpz_init(tmp);
+            for (int k = 0; k < width; k++) {
+                mpz_mul(tmp, mult, matrix[ind][k]);
+                mpz_sub(matrix[j][k], matrix[j][k], tmp);
+                mpz_mod(matrix[j][k], matrix[j][k], modulus);
+            }
+            
+            mpz_mul(tmp, mult, solution_array[ind]);
+            mpz_sub(solution_array[j], solution_array[j], tmp);
+            mpz_mod(solution_array[j], solution_array[j], modulus);
+            mpz_clears(mult, tmp, NULL);
+        }
+        // printf("Matrix:\n");
+        // for (int i = 0; i < height; i++) {
+        //     for (int j = 0; j < width; j++) {
+        //         gmp_printf("%Zd ", matrix[i][j]);
+        //     }
+        //     printf("\n");
+        // }
+    }
+
+
+    // for (int i = 0; i <= width; i++) {
+    //     mpz_clear(used[i]); 
+    // }
+    // printf("we are here\n");
+    free(used);
+
+    for (int i = 0; i < width; i++) {
+        for (int j = 0; j < height; j++) {
+            if (mpz_cmp_ui(matrix[j][i], 1) == 0) {
+                mpz_set(result[i], solution_array[j]);
+                // gmp_printf("%Zd\n", result[i]);
+            }
+        }
+    }
+
 }
 
 
@@ -459,7 +543,6 @@ void generateFactorBase(mpz_t n, mpz_t *result, size_t *result_len){ //works
     double e = exp(1);
     double n_log = mpz_get_d(n);
     double b = round(exp(0.5 * pow(log(n_log) * log(log(n_log)), 0.5)) * 3.38);
-
     *result_len = 0;
     for (int i = 2; i < b; i++) {
         if (isPrime(i)) {
@@ -502,10 +585,11 @@ void clearFactorStruct(FactorPowerPair *factors, int numFactors) {
     free(factors);
 }
 
+
 void mpzIndexCalculus(mpz_t a, mpz_t b, mpz_t p, mpz_t result) {
     //create factor base
     mpz_t n;
-    size_t mC = 8;
+    size_t mC = 15;
     mpz_init_set(n, p);
     mpz_sub_ui(n, n, 1);
     gmp_randstate_t state;
@@ -594,7 +678,7 @@ void mpzIndexCalculus(mpz_t a, mpz_t b, mpz_t p, mpz_t result) {
 
         //log ---------------------------------------------
         // printf("check passed\n");
-        // // printf("Factors:\n");
+        // printf("Factors:\n");
         // for (int i = 0; i < numFactors; i++) {
         //     gmp_printf("%Zd^%Zd ", factors[i].factor, factors[i].power);
         // }
@@ -620,13 +704,64 @@ void mpzIndexCalculus(mpz_t a, mpz_t b, mpz_t p, mpz_t result) {
             for (int i = 0; i < factor_base_len; i++) {
                 mpz_set_ui(matrix[mCount][i], 0);
             }
+            mpz_t *tmp_v = malloc(factor_base_len * sizeof(mpz_t));
+            for (int i = 0; i < factor_base_len; i++) {
+                mpz_init(tmp_v[i]);
+            }
 
             for (int i = 0; i < numFactors; i++) {
                 int indx = binary_search(factor_base, factor_base_len, factors[i].factor);
-                mpz_set(matrix[mCount][indx], factors[i].power);
+                // mpz_set(matrix[mCount][indx], factors[i].power);
+                // mpz_mod_ui(aK, factors[i].power, 2);
+                mpz_set(tmp_v[indx], factors[i].power);
             }
-            mpz_set(solutions_array[mCount], k);
-            mCount++;
+            // printf("Matrix:\n");
+            // for (int i = 0; i < mCount; i++) {
+            //     for (int j = 0; j < factor_base_len; j++) {
+            //         gmp_printf("%Zd ", matrix[i][j]);
+            //     }
+            //     printf("\n");
+            // }
+            // printf("\n");
+            // for (int j = 0; j < factor_base_len; j++) {
+            //     gmp_printf("%Zd ", tmp_v[j]);
+            // }
+            // printf("\n");
+            int present = 0;
+            for (int i = 0; i < mCount; i++) {
+                int eq = 1;
+                for (int j = 0; j < factor_base_len; j++) {
+                    if (mpz_cmp(matrix[i][j], tmp_v[j]) != 0) {
+                        eq = 0;
+                        break;
+                    }
+                }
+                if (eq) {
+                    // printf("FOUND EQUAL\n");
+                    present = 1;
+                    break;
+                }
+            }
+            // if (present) exit(-1);
+            if (!present) {
+                // gmp_printf("factors with k = %Zd\n", k);
+                // for (int i = 0; i < numFactors; i++) {
+                //     gmp_printf("%Zd^%Zd ", factors[i].factor, factors[i].power);
+                // }
+                // printf("\n");   
+
+
+
+                for (int i = 0; i < factor_base_len; i++) {
+                    mpz_set(matrix[mCount][i], tmp_v[i]);
+                }
+                mpz_set(solutions_array[mCount], k);
+                mCount++;
+            }
+            for (int i = 0; i < factor_base_len; i++) {
+                mpz_clear(tmp_v[i]);
+            }
+            free(tmp_v);
         } else {
             continue;
             // clearFactorStruct(factors, numFactors);
@@ -646,40 +781,46 @@ void mpzIndexCalculus(mpz_t a, mpz_t b, mpz_t p, mpz_t result) {
 
 
     //log ---------------------------------------------
-
-    // printf("Matrix:\n");
-    // for (int i = 0; i < matrix_len; i++) {
-    //     for (int j = 0; j < factor_base_len; j++) {
-    //         printf("%d ", matrix[i][j]);
-    //     }
-    //     printf("\n");
-    // }
-    // // Print the solutions array
-    // printf("Solutions array:\n");
-    // for (int i = 0; i < matrix_len; i++) {
-    //     gmp_printf("%Zd ", solutions_array[i]);
-    // }
-    // printf("\n");
+    printf("factor base\n");
+    for (int i = 0; i < factor_base_len; i++) {
+        gmp_printf("%Zd ", factor_base[i]);
+    }
+    printf("\nMatrix:\n");
+    for (int i = 0; i < matrix_len; i++) {
+        for (int j = 0; j < factor_base_len; j++) {
+            gmp_printf("%Zd ", matrix[i][j]);
+        }
+        printf("\n");
+    }
+    // Print the solutions array
+    printf("Solutions array:\n");
+    for (int i = 0; i < matrix_len; i++) {
+        gmp_printf("%Zd ", solutions_array[i]);
+    }
+    printf("\n");
     //end of log---------------------------------------
     mpz_t *solution = malloc(factor_base_len * sizeof(mpz_t));
     for (int i = 0; i < factor_base_len; i++) {
         mpz_init(solution[i]);
     }
-    gaussian_elim(matrix, solutions_array, n, matrix_len, factor_base_len, solution);
+    slv(matrix, solutions_array, n, matrix_len, factor_base_len, solution);
 
     //log ---------------------------------------------
-    // printf("solution:\n");
-    // for (int i = 0; i < factor_base_len; i++) {
-    //     gmp_printf("%Zd ", solution[i]);
-    // }
-    // printf("\n");
+    printf("solution:\n");
+    for (int i = 0; i < factor_base_len; i++) {
+        gmp_printf("%Zd ", solution[i]);
+    }
+    printf("\n");
     //end of log---------------------------------------
 
     // return;
     mpz_t tmp1,tmp2;
     mpz_init_set_ui(tmp1, 1);
     mpz_init_set_ui(tmp2, 1);
+    uint64_t counterTMP = 0;
     while (1) {
+        counterTMP++;
+        if (counterTMP % 100000 == 0) printf("C: %lu\n", counterTMP);
         mpz_urandomm(k, state, n);
         mpz_power(a, k, p, tmp1);
         mpz_mul(tmp2, b, tmp1);
@@ -730,8 +871,26 @@ void mpzIndexCalculus(mpz_t a, mpz_t b, mpz_t p, mpz_t result) {
             continue;
         }
 
-        // printf("we are here 738\n");
+        // printf("number is in base\n");
+        // gmp_printf("k = %Zd\n", k);
+        // for (int i = 0; i < numFactors; i++) {
+        //     gmp_printf("%Zd^%Zd ", factors[i].factor, factors[i].power);
+        // }
+        // printf("\n");
+        // printf("factor base:\n");
+        // for (int i = 0; i < factor_base_len; i++) {
+        //     gmp_printf("%Zd, ", factor_base[i]);
+        // }
+        // printf("\n");
+        // printf("solution:\n");
+        // for (int i = 0; i < factor_base_len; i++) {
+        //     gmp_printf("%Zd, ", solution[i]);
+        // }
+        // printf("\n");
 
+        // gmp_printf("parameters: a = %Zd; b = %Zd; p = %Zd\n", a, b, p);
+        // printf("we are here 738\n");
+        printf("Found solution in base\n");
         mpz_t rlog;
         mpz_init_set_ui(rlog, 0);
         for (int i = 0; i < numFactors; i++) {
