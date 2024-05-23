@@ -528,7 +528,7 @@ typedef struct {
 void* generateSubMatrix(void *arg) {
     ThreadDataGen *data = (ThreadDataGen*) arg;
 
-    printf("Thread %d started\n", data->id);
+    // printf("Thread %d started\n", data->id);
     
     size_t factor_base_len = data->factor_base_len;
     mpz_t a, p, n;
@@ -542,8 +542,8 @@ void* generateSubMatrix(void *arg) {
 
     gmp_randstate_t state;
     gmp_randinit_default(state);    
-    gmp_randseed_ui(state, time(NULL));
-
+    gmp_randseed_ui(state, time(NULL)+(data->id * 1000));
+    
     size_t matrix_len = data->matrix_len;
     
 
@@ -651,7 +651,7 @@ void* generateSubMatrix(void *arg) {
     mpz_clear(aK);
     mpz_clear(k);
     gmp_randclear(state);   
-    printf("Thread %d finished\n", data->id);
+    // printf("Thread %d finished\n", data->id);
     return NULL;
 }
 
@@ -672,7 +672,7 @@ typedef struct {
 
 void* findSolution(void *arg) {
     ThreadDataSolve *data = (ThreadDataSolve*) arg;
-    printf("Thread %d started\n", data->id);
+    // printf("Thread %d started\n", data->id);
 
 
     mpz_t a, b, p, n;
@@ -693,9 +693,11 @@ void* findSolution(void *arg) {
     mpz_init_set_ui(tmp2, 1);
     gmp_randstate_t state;
     gmp_randinit_default(state);    
-    gmp_randseed_ui(state, time(NULL));
+    gmp_randseed_ui(state, time(NULL)* (data->id * 1000));
     mpz_t k;
     mpz_init(k);
+    mpz_urandomm(k, state, n);
+    gmp_printf("Thread %d started with random number: %Zd\n", data->id, k);
     uint64_t counterTMP = 0;
     while (1) {
         pthread_mutex_lock(data->mutex);
@@ -705,10 +707,10 @@ void* findSolution(void *arg) {
         }
         pthread_mutex_unlock(data->mutex);
 
-   
-        if (counterTMP % 10000 == 0 && counterTMP != 0) printf("C%i:%i\n", data->id, counterTMP);
-        // printf("C:%i\n", counterTMP);
         counterTMP++;
+        if (counterTMP % 100000 == 0) printf("C%i:%lu\n", data->id, counterTMP);
+        // printf("C:%i\n", counterTMP);
+
         mpz_urandomm(k, state, n);
         mpz_power(a, k, p, tmp1);
         mpz_mul(tmp2, b, tmp1);
@@ -737,6 +739,7 @@ void* findSolution(void *arg) {
         if (mpz_cmp(maxF, factor_base[factor_base_len - 1]) > 0) {
             
             clearFactorStruct(factors, numFactors);
+            mpz_clear(maxF);
             // printf("cleared struct\n");
             continue;
         }
@@ -802,7 +805,7 @@ void* findSolution(void *arg) {
     mpz_clear(k);
     gmp_randclear(state);  
     mpz_clears(a, b, p, n, NULL);
-    printf("Thread %d ended\n", data->id);
+    // printf("Thread %d ended\n", data->id);
     return NULL;
 }
 
