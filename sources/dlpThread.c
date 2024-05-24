@@ -279,7 +279,6 @@ typedef struct {
 
 
 FactorPowerPair* factorize(mpz_t mpz_n, int* numFactors) {
-    fflush(stdout);
     gmp_randstate_t rand_state;
     gmp_randinit_default(rand_state);
     // gmp_printf("Number to factorize: %Zd\n", mpz_n);
@@ -287,12 +286,10 @@ FactorPowerPair* factorize(mpz_t mpz_n, int* numFactors) {
     *numFactors = 0;
 
     if (isMillerRabin(mpz_n, rand_state)) {
-
         mpz_init_set(factors[*numFactors].factor, mpz_n);
         mpz_init_set_ui(factors[*numFactors].power, 1);
         (*numFactors)++;
     } else {
-
         while (1) {
             mpz_t factor;
             mpz_init(factor);
@@ -315,15 +312,13 @@ FactorPowerPair* factorize(mpz_t mpz_n, int* numFactors) {
                 }
                 if (mpz_cmp(step_res, factor) == 0) {
                     lastResort(factor, step_res);
-                } 
-                if (mpz_cmp(step_res, factor) == 0) {
-                    printf("well  I  tried. . .\n");
-                    exit(-1);
                 }
                 mpz_set(factor, step_res);
                 mpz_clear(step_res);   
                 // gmp_printf("Factor: %Zd\n", factor);
             }
+            
+            // gmp_printf("factor: %Zd\n", factor);
 
             // Check if factor is already in the factors array
             int found = 0;
@@ -344,9 +339,23 @@ FactorPowerPair* factorize(mpz_t mpz_n, int* numFactors) {
 
             mpz_divexact(mpz_n, mpz_n, factor);
             if (isMillerRabin(mpz_n, rand_state)) {
-                mpz_init_set(factors[*numFactors].factor, mpz_n);
-                mpz_init_set_ui(factors[*numFactors].power, 1);
-                (*numFactors)++;
+                // printf("n is prime\n");
+                // gmp_printf("n: %Zd\n", mpz_n);
+                int found = 0;
+                for (int i = 0; i < *numFactors; i++) {
+                    if (mpz_cmp(factors[i].factor, mpz_n) == 0) {
+                        mpz_add_ui(factors[i].power, factors[i].power, 1);
+                        found = 1;
+                        break;
+                    }
+                }
+
+                // If factor is not in the factors array, add it
+                if (!found) {
+                    mpz_init_set(factors[*numFactors].factor, mpz_n);
+                    mpz_init_set_ui(factors[*numFactors].power, 1);
+                    (*numFactors)++;
+                }
                 break;
             }
 
@@ -421,11 +430,13 @@ void gaussian_elim(mpz_t **matrix, mpz_t *solution_array, mpz_t modulus, int hei
             // gmp_printf("r = %Zd\n", r);
             for (int l = 0; l < width; l++) {
                 mpz_mul(res, matrix[j][l], r);
-                mpz_mod(res, res, modulus);
-                mpz_set(matrix[j][l], res); 
-                mpz_mul(solution_array[j], solution_array[j], r); 
-                mpz_mod(solution_array[j], solution_array[j], modulus);
+                mpz_mod(matrix[j][l], res, modulus);
             }
+            // gmp_printf("sol arr j %Zd\n", solution_array[j]);
+            mpz_mul(res, solution_array[j], r); 
+            // gmp_printf("res %Zd\n", res);
+            mpz_mod(solution_array[j], res, modulus);
+            // gmp_printf("sol arr j %Zd\n", solution_array[j]);
             for (int l = 0; l < height; l++) {
                 if (l == j) {
                     continue;
@@ -435,8 +446,7 @@ void gaussian_elim(mpz_t **matrix, mpz_t *solution_array, mpz_t modulus, int hei
                     for (int k = 0; k < width; k++) {
                         mpz_mul(temp, matrix[j][k], r);
                         mpz_sub(res, matrix[l][k], temp);
-                        mpz_mod(res, res, modulus);
-                        mpz_set(matrix[l][k], res);
+                        mpz_mod(matrix[l][k], res, modulus);
                     }
                     mpz_mul(temp, solution_array[j], r);
                     mpz_sub(solution_array[l], solution_array[l], temp);
@@ -444,15 +454,16 @@ void gaussian_elim(mpz_t **matrix, mpz_t *solution_array, mpz_t modulus, int hei
                 }
             }
             //log ---------------------------------------------
-
             // printf("Matrix:\n");
             // for (int it = 0; it < height; it++) {
             //     for (int jt = 0; jt < width; jt++) {
-            //         printf("%d ", matrix[it][jt]);
+            //         gmp_printf("%Zd ", matrix[it][jt]);
             //     }
+            //     gmp_printf(" = %Zd", solution_array[it]);
             //     printf("\n");
             // }
             // printf("\n");
+            
             break;
         }
     }
@@ -464,6 +475,7 @@ void gaussian_elim(mpz_t **matrix, mpz_t *solution_array, mpz_t modulus, int hei
             }
         }
     }
+    
     mpz_clears(temp, r, res, NULL);
 }
 
@@ -708,7 +720,7 @@ void* findSolution(void *arg) {
         pthread_mutex_unlock(data->mutex);
 
         counterTMP++;
-        if (counterTMP % 100000 == 0) printf("C%i:%lu\n", data->id, counterTMP);
+        if (counterTMP % 100000 == 0) printf("C%i:%lu\r", data->id, counterTMP);
         // printf("C:%i\n", counterTMP);
 
         mpz_urandomm(k, state, n);
@@ -835,7 +847,7 @@ void mpzIndexCalculus(mpz_t a, mpz_t b, mpz_t p, mpz_t result) {
 
     //thread mod started
 
-    size_t mC = 8;
+    size_t mC = 15 + round(factor_base_len/5);
     size_t matrix_len = factor_base_len + mC;
     mpz_t **matrix = malloc(matrix_len * sizeof(mpz_t*));
     for (int i = 0; i < matrix_len; i++) {
@@ -888,7 +900,7 @@ void mpzIndexCalculus(mpz_t a, mpz_t b, mpz_t p, mpz_t result) {
     //     }
     //     printf("\n");
     // }
-    // // Print the solutions array
+    // Print the solutions array
     // printf("Solutions array:\n");
     // for (int i = 0; i < matrix_len; i++) {
     //     gmp_printf("%Zd ", solutions_array[i]);
