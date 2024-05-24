@@ -5,7 +5,7 @@ VERBOSE = True
 
 class DLPSolver:
     def __init__(self):
-        self.lib_name = "./libdlpT.so"
+        self.lib_name = "./libdlp.so"
         self.lib = self.initLib()
 
     def initLib(self) -> CDLL:
